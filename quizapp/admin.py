@@ -4,7 +4,7 @@ from django.urls import path
 from django.contrib import admin
 from django.contrib.auth.models import Group
 from django.shortcuts import redirect, render
-from .models import User , Category ,Result , Questions
+from .models import User , Category ,Result , Question
 
 admin.site.unregister(Group)
 
@@ -37,7 +37,7 @@ class CsvDataAdmin(admin.ModelAdmin):
                     for index, row in df.iterrows():
                         print("1111111111")
                         category, _ = Category.objects.get_or_create(name=row['category'])
-                        questions = Questions.objects.create(category=category, title=row['question'], option1=row['option1'], option2=row['option2'], option3=row['option3'], option4=row['option4'], correct_option=row['correct_option'])
+                        questions = Question.objects.create(category=category, title=row['question'], option1=row['option1'], option2=row['option2'], option3=row['option3'], option4=row['option4'], correct_option=row['correct_option'])
                 self.message_user(request, "Data uploaded successfully.")
                 return redirect("..")
         else:
@@ -47,4 +47,4 @@ class CsvDataAdmin(admin.ModelAdmin):
     csv_upload_view.short_description = "Upload CSV data"
 
 admin.site.register(Category, CsvDataAdmin)
-admin.site.register(Questions)
+admin.site.register(Question)
