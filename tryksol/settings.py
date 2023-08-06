@@ -151,4 +151,7 @@ JAZZMIN_SETTINGS = {
                         "site_brand": "Tryksol",
                         "welcome_sign": "Tryksol Admin",
                         "copyright": "Tryksol",
+                        "order_with_respect_to": ["quizapp", "quizapp.category", "quizapp.quiz","quizapp.question"],
+                        "show_sidebar": True,
+                        "navigation_expanded": True,
                     }
