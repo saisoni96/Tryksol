@@ -2,6 +2,7 @@ from rest_framework import views, status
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from .utils import generate_otp
+import ast
 from .models import User,Category, Quiz, Question, Option, Result
 from django.contrib.auth import authenticate, logout
 from quizapp.serializers import UserRegisterSerializer
@@ -85,12 +86,11 @@ class UserLoginView(views.APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class ResetPasswordView(views.APIView):
+class ResetPasswdView(views.APIView):
     def post(self, request):
         try:
-            access_token = request.META.get('HTTP_AUTHORIZATION', '').split(' ')[-1]
-            mobile_number = request.POST.get('mobile_number')
-            new_password = request.POST.get('new_password')
+            mobile_number = request.data.get('mobile_number')
+            new_password = request.data.get('new_password')
 
             if not (mobile_number and new_password):
                 return Response({'error': 'Mobile number and new password are required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -124,28 +124,33 @@ class CategoryListView(views.APIView):
     def get(self, request):
         try:
             categories = Category.objects.all()
-            items = [{"categoryId": category.category_id, "categoryName": category.category_name,"categoryDescription":category.description} for category in categories]
+            items = [{"categoryId":category.id,"categoryName":category.category_name,"categoryDescription":category.description} for category in categories]
+            return Response(items, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class quizListView(views.APIView):
+    def get(self, request, category_id):
+        try:
+            quiz = Quiz.objects.filter(category_id=category_id)
+            items = [{"quizId": item.id, "quizName": item.quiz_title,"quizDescription":item.quiz_description} for item in quiz]
             return Response(items, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class FetchNewQuiz(views.APIView):
-    def get(self, request, category_id):
+    def get(self, request, quiz_id):
         try:
-            category = Category.objects.get(category_id=category_id)
-            quiz = Quiz.objects.create(category=category)
-            quiz_id = quiz.quiz_id
-
-            all_questions = Question.objects.filter(quiz=quiz)
+            all_questions = Question.objects.filter(quiz=quiz_id)
             selected_questions = all_questions.order_by('?')[:60]
 
             serialized_questions = []
             for question in selected_questions:
                 options = Option.objects.filter(question=question)
-                serialized_options = [{"optionId": option.option_id, "optionText": option.option_text} for option in options]
+                serialized_options = [{"optionId": option.id,"isCorrectOption":option.is_correct_option, "optionText": option.option_text} for option in options]
 
                 serialized_question = {
-                    'questionId': question.question_id,
+                    'questionId': question.id,
                     'questionText': question.question_text,
                     'options': serialized_options,
                 }
@@ -166,17 +171,15 @@ class SaveQuizResponse(views.APIView):
         try:
             quiz_id = request.data.get('quizId')
             quiz_responses = request.data.get('quizResponses')
-
             try:
-                quiz = Quiz.objects.get(quiz_id=quiz_id)
+                quiz = Quiz.objects.get(id=quiz_id)
             except Quiz.DoesNotExist:
                 return Response({'message': 'Invalid quizId'}, status=status.HTTP_400_BAD_REQUEST)
-
             result = Result.objects.create(
                 user=request.user,
                 quiz=quiz,
+                quiz_data = str(request.data)
             )
-
             score = 0
             total_questions = 0
             attempted_correct = 0
@@ -184,16 +187,15 @@ class SaveQuizResponse(views.APIView):
 
             for response in quiz_responses:
                 question_id = response['questionId']
-                selected_option_id = response['selectedOptionId']
+                selected_option_ids = response.get('optionIds', [])
 
                 try:
-                    question = Question.objects.get(question_id=question_id)
+                    question = Question.objects.get(id=question_id)
                 except Question.DoesNotExist:
                     return Response({'message': 'Invalid question ID'}, status=status.HTTP_400_BAD_REQUEST)
 
-                selected_option = Option.objects.get(option_id=selected_option_id)
-
-                if selected_option.is_correct_option:
+                correct_option_ids = Option.objects.filter(question_id = question_id,is_correct_option=True)
+                if set(selected_option_ids) == set(correct_option_ids):
                     score += 1
                     attempted_correct += 1
                 else:
@@ -215,25 +217,29 @@ class SaveQuizResponse(views.APIView):
             return Response(response_data)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        
 class Results(views.APIView):
     def get(self, request):
         try:
             queryset = Result.objects.filter(user=request.user)
-            quiz_ids = queryset.values_list('quiz_id', flat=True)
-            return Response(list(quiz_ids), status=status.HTTP_200_OK)
+            items = [{"resultId": item.id, "quizId": item.quiz_id, "category": item.quiz.category.category_name, "quizTitle": item.quiz.quiz_title} for item in queryset]
+            response_data = {
+                'results': items
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ResultDetails(views.APIView):
-    def get(self, request, quiz_id):
+    def get(self, request, result_id):
         try:
-            result = Result.objects.get(quiz_id=quiz_id)
-
+            result = Result.objects.get(id=result_id)
             data = {
-                'quizId': quiz_id,
-                'user': result.user.username,
-                'quizCategory': result.quiz.category.category_name,
+                'result_id': result_id,
+                'user': result.user.first_name,
+                'Category': result.quiz.category.category_name,
+                'quizTitle':result.quiz.quiz_title,
+                'quiz_data':ast.literal_eval(result.quiz_data),
                 'score': result.score,
                 'dateCompleted': result.date_completed,
                 'createdAt': result.created_at,
@@ -244,151 +250,4 @@ class ResultDetails(views.APIView):
             return Response({'message': 'Result not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
-
-
-
-# class CategoryListView(views.APIView):
-#     def get(self, request):
-#         user_id = request.user.id
-#         queryset = Category.objects.all()
-#         items  = [{"categoryId" : item.id,"categoryName":item.name}for item in queryset]
-#         return Response(items,status=status.HTTP_200_OK)
-    
-# class FetchNewQuiz(views.APIView):
-#     def get(self,request,category_id):
-#         user_id = request.user.id
-#         # Create a new QuizSession object to get a unique quiz_room_id
-#         quiz_session = QuizSession.objects.create(user=request.user)
-
-#         # Get the quiz_room_id from the newly created QuizSession object
-#         quiz_room_id = quiz_session.pk
-        
-#         # Assuming you have a queryset to filter questions based on category
-#         all_questions = Questions.objects.filter(category_id=category_id)
-
-#         # Randomly select 60 questions from the pool of available questions
-#         selected_questions = all_questions.order_by('?')[:60]
-
-#         # Your logic to serialize the selected questions into JSON data
-#         serialized_questions = []
-#         for question in selected_questions:
-#             serialized_question = {
-#                 'id': question.id,
-#                 'title': question.title,
-#                 'option1': question.option1,
-#                 'option2': question.option2,
-#                 'option3': question.option3,
-#                 'option4': question.option4,
-#                 'correct_option':question.correct_option,
-#             }
-#             serialized_questions.append(serialized_question)
-
-#         response_data = {
-#             'quiz_room_id': quiz_room_id,
-#             'questions': serialized_questions,
-#         }
-#         return Response(response_data)
-
-# class SaveQuizResponse(views.APIView):
-#     def post(self, request):
-#         user_id = request.user.id
-#         quiz_room_id = request.data.get('quiz_room_id')
-#         quiz_responses = request.data.get('quiz_responses')
-
-#         try:
-#             # Retrieve the QuizSession based on the quiz_room_id
-#             quiz_session = QuizSession.objects.get(quiz_room_id=quiz_room_id)
-#         except QuizSession.DoesNotExist:
-#             return Response({'message': 'Invalid quiz_room_id'}, status=400)
-
-#         # Create a new Result object for the user's quiz attempt
-#         result = Result.objects.create(
-#             user=request.user,
-#             quiz_room_id=quiz_session,
-#             quiz_data=quiz_responses,
-#         )
-
-#         # Calculate the score based on the user's responses
-#         score = 0
-#         total_questions = 0
-#         attempted_correct = 0
-#         attempted_wrong = 0
-
-#         for response in quiz_responses:
-#             question_id = response['question_id']
-#             selected_option = response['selected_option']
-
-#             # Retrieve the Quiz object based on the question_id
-#             try:
-#                 quiz = Questions.objects.get(id=question_id)
-#             except Questions.DoesNotExist:
-#                 return Response({'message': 'Invalid question ID'}, status=400)
-
-#             # Check if the selected option is correct
-#             if selected_option == quiz.correct_option:
-#                 score += 1
-#                 attempted_correct += 1
-#             else:
-#                 attempted_wrong += 1
-
-#             total_questions += 1
-
-#         # Update the score in the Result object
-#         result.score = score
-#         result.number_of_correct_answers = attempted_correct
-#         result.number_of_wrong_answers = attempted_wrong
-#         result.save()
-
-#         response_data = {
-#             'message': 'Quiz response saved successfully!',
-#             'score': score,
-#             'total_questions': total_questions,
-#             'attempted_correct': attempted_correct,
-#             'attempted_wrong': attempted_wrong,
-#         }
-
-#         return Response(response_data)
-
-# class Results(views.APIView):
-#     def get(request):
-#         user_id = request.user.id
-#         # Get a list of quiz room IDs for the specific user
-#         queryset = Result.objects.filter(user_id=user_id)
-
-#         if not queryset.exists():
-#             # Return an empty list if no results are found for the user
-#             return Response([], status=status.HTTP_200_OK)
-
-#         # Get a list of quiz room IDs from the queryset
-#         quiz_room_ids = queryset.values_list('quiz_room_id', flat=True)
-
-#         # Convert the queryset to a list and send the response
-#         return Response(list(quiz_room_ids), status=status.HTTP_200_OK)
-
-
-# class ResultDetails(views.APIView):
-#     def get(self, request, quiz_room_id):
-#         user_id = request.user.id
-#         # Get the quiz session result based on the quiz room ID (quiz_room_id)
-#         result = get_object_or_404(Result, quiz_room_id=quiz_room_id)
-
-#         # Get the associated quiz session details
-#         quiz_session = get_object_or_404(QuizSession, pk=quiz_room_id)
-
-#         data = {
-#             'quiz_room_id': quiz_room_id,
-#             'user': result.user.username,
-#             'quiz_category': quiz_session.category.name,
-#             'score': result.score,
-#             'number_of_correct_answers': result.number_of_correct_answers,
-#             'number_of_wrong_answers': result.number_of_wrong_answers,
-#             'date_completed': result.date_completed,
-#             'created_at': result.created_at,
-#             'updated_at': result.updated_at,
-#         }
-#         return Response(data, status=status.HTTP_200_OK)
-    
     
