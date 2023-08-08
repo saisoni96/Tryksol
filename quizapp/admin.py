@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import csv
 from django.urls import path
@@ -11,7 +12,7 @@ from rest_framework.authtoken.models import TokenProxy
 admin.site.unregister(TokenProxy)
 admin.site.unregister(Group)
 
-from .forms import CsvUploadForm
+from .forms import UploadForm
 import csv
 
 class OptionInline(admin.TabularInline):
@@ -34,47 +35,71 @@ class QuestionAdmin(admin.ModelAdmin):
 
     def csv_upload_view(self, request):
         if request.method == 'POST':
-            form = CsvUploadForm(request.POST, request.FILES)
+            form = UploadForm(request.POST, request.FILES)
             if form.is_valid():
-                csv_file = request.FILES['csv_file']
-                df = pd.read_csv(csv_file)
+                uploaded_file = request.FILES['file']
+                file_extension = os.path.splitext(uploaded_file.name)[1].lower()
+                allowed_extensions = ['.csv', '.xls', '.xlsx']
+                
+                if file_extension not in allowed_extensions:
+                    self.message_user(request, "Invalid file type. Please upload a valid CSV or Excel file.")
+                    return redirect("..")
+
+                if file_extension == '.csv':
+                    df = pd.read_csv(uploaded_file)
+                else:  # Excel file
+                    df = pd.read_excel(uploaded_file)
+
+                if df.empty:
+                    self.message_user(request, "Error reading the file.")
+                    return redirect("..")
+                
                 required_fields = ['category', 'quiz', 'question', 'option1', 'option2', 'option3', 'option4', 'correct_option']
 
-                for field in required_fields:
-                    if field not in df.columns:
-                        self.message_user(request, f"Required field '{field}' is not present in the CSV.")
-                        return redirect("..")
-
-
+                missing_fields = [field for field in required_fields if field not in df.columns]
+                if missing_fields:
+                    self.message_user(request, f"Missing fields: {', '.join(missing_fields)}")
+                    return redirect("..")
+                
                 for index, row in df.iterrows():
                     category_name = row['category']
                     quiz_title = row['quiz']
                     question_text = row['question']
                     option_texts = [row['option1'], row['option2'], row['option3'], row['option4']]
-                    correct_option = row['correct_option']
+                    correct_option_labels = [label.strip() for label in row['correct_option'].split(",")]
+
                     try:
                         category = Category.objects.get(category_name=category_name)
-                    except:
+                    except Category.DoesNotExist:
                         self.message_user(request, "Category not present.")
                         return redirect("..")
+
                     try:
-                        quiz= Quiz.objects.get(category=category, quiz_title=quiz_title)
-                    except:
+                        quiz = Quiz.objects.get(category=category, quiz_title=quiz_title)
+                    except Quiz.DoesNotExist:
                         self.message_user(request, "Quiz not present.")
                         return redirect("..")
+
                     question = Question.objects.create(quiz=quiz, question_text=question_text)
-                    for i in correct_option.split(","):
-                        options = [
-                            Option(question=question, option_text=option_text, is_correct_option=option_text == correct_option)
-                            for option_text in option_texts
-                        ]
-                        Option.objects.bulk_create(options)
 
+                    options = [
+                        Option(
+                            question=question,
+                            option_text=option_text,
+                            is_correct_option=(option_text in correct_option_labels)
+                        )
+                        for option_text in option_texts
+                    ]
 
-                self.message_user(request, "Data uploaded successfully.")
+                    Option.objects.bulk_create(options)
+
+                self.message_user(request, "File uploaded successfully.")
+                return redirect("..")
+            else:
+                self.message_user(request, "Invalid form data.")
                 return redirect("..")
         else:
-            form = CsvUploadForm()
+            form = UploadForm()
         return render(request, 'admin/category/csv_upload_form.html', {'form': form})
 
     csv_upload_view.short_description = "Upload CSV data"
