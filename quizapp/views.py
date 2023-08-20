@@ -169,54 +169,77 @@ class FetchNewQuiz(views.APIView):
 class SaveQuizResponse(views.APIView):
     def post(self, request):
         try:
-            quiz_id = request.data.get('quizId')
-            quiz_responses = request.data.get('quizResponses')
+            user = request.user
+            response_data = []
+
+            quiz_id = request.data.get("quizId")
+            if quiz_id is None:
+                return Response({'message': 'No quizId provided'}, status=status.HTTP_400_BAD_REQUEST)
+
             try:
                 quiz = Quiz.objects.get(id=quiz_id)
             except Quiz.DoesNotExist:
                 return Response({'message': 'Invalid quizId'}, status=status.HTTP_400_BAD_REQUEST)
-            result = Result.objects.create(
-                user=request.user,
-                quiz=quiz,
-                quiz_data = str(request.data)
-            )
-            score = 0
+
+            consolidated_responses = []
+            total_score = 0
             total_questions = 0
-            attempted_correct = 0
-            attempted_wrong = 0
+            total_attempted_correct = 0
+            total_attempted_wrong = 0
 
-            for response in quiz_responses:
-                question_id = response['questionId']
-                selected_option_ids = response.get('optionIds', [])
+            responses = request.data.get("responses", [])
 
-                try:
-                    question = Question.objects.get(id=question_id)
-                except Question.DoesNotExist:
-                    return Response({'message': 'Invalid question ID'}, status=status.HTTP_400_BAD_REQUEST)
+            for response_item in responses:
+                selected_options = response_item.get("selectedOptions", [])
+                quiz_responses_data = response_item.get("quizResponses", [])
+                score = 0
+                attempted_correct = 0
+                attempted_wrong = 0
 
-                correct_option_ids = Option.objects.filter(question_id = question_id,is_correct_option=True)
-                if set(selected_option_ids) == set(correct_option_ids):
-                    score += 1
-                    attempted_correct += 1
-                else:
-                    attempted_wrong += 1
+                for response in quiz_responses_data:
+                    question_id = response['questionId']
+                    selected_option_ids = selected_options
 
-                total_questions += 1
+                    try:
+                        question = Question.objects.get(id=question_id)
+                    except Question.DoesNotExist:
+                        response_data.append({'message': 'Invalid question ID', 'status': status.HTTP_400_BAD_REQUEST})
+                        continue
 
-            result.score = score
-            result.save()
+                    correct_option_ids = Option.objects.filter(question_id=question_id, is_correct_option=True).values_list('id', flat=True)
+                    if set(selected_option_ids) == set(correct_option_ids):
+                        score += 1
+                        attempted_correct += 1
+                    else:
+                        attempted_wrong += 1
 
-            response_data = {
+                total_score += score
+                total_questions += len(quiz_responses_data)
+                total_attempted_correct += attempted_correct
+                total_attempted_wrong += attempted_wrong
+
+            result = Result.objects.create(
+                user=user,
+                quiz=quiz,
+                quiz_data=str(request.data),
+                score=total_score
+            )
+
+            response_data.append({
                 'message': 'Quiz response saved successfully!',
-                'score': score,
+                'score': total_score,
                 'totalQuestions': total_questions,
-                'attemptedCorrect': attempted_correct,
-                'attemptedWrong': attempted_wrong,
-            }
+                'attemptedCorrect': total_attempted_correct,
+                'attemptedWrong': total_attempted_wrong,
+                'status': status.HTTP_200_OK
+            })
 
             return Response(response_data)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
         
 class Results(views.APIView):
     def get(self, request):
@@ -250,4 +273,3 @@ class ResultDetails(views.APIView):
             return Response({'message': 'Result not found.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
