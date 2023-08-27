@@ -5,15 +5,22 @@ from django.urls import path
 from django.contrib import admin
 from django.contrib.auth.models import Group
 from django.shortcuts import redirect, render
-from .models import User , Category ,Result , Question ,  Quiz , Option
+from .models import User, Category, Result, Question, Quiz, Option
 from rest_framework.authtoken.models import TokenProxy
-
 
 admin.site.unregister(TokenProxy)
 admin.site.unregister(Group)
 
 from .forms import UploadForm
 import csv
+
+class CategoryAdmin(admin.ModelAdmin):
+    search_fields = ['category_name']
+
+
+class QuizAdmin(admin.ModelAdmin):
+    list_filter = ['category__category_name']
+    search_fields = ['quiz_title']
 
 class OptionInline(admin.TabularInline):
     model = Option
@@ -24,6 +31,8 @@ class OptionInline(admin.TabularInline):
 
 class QuestionAdmin(admin.ModelAdmin):
     inlines = [OptionInline]
+    search_fields = ['question_text']
+    list_filter = ['quiz__category__category_name' , 'quiz__quiz_title']
     change_list_template = 'admin/category/csv_upload_change_list.html'
 
     def get_urls(self):
@@ -47,7 +56,7 @@ class QuestionAdmin(admin.ModelAdmin):
 
                 if file_extension == '.csv':
                     df = pd.read_csv(uploaded_file)
-                else:  # Excel file
+                else:
                     df = pd.read_excel(uploaded_file)
 
                 if df.empty:
@@ -66,6 +75,9 @@ class QuestionAdmin(admin.ModelAdmin):
                     quiz_title = row['quiz']
                     question_text = row['question']
                     option_texts = [row['option1'], row['option2'], row['option3'], row['option4']]
+                    if 'option5' in df.columns and row['option5']:
+                        option_texts.append(row['option5'])
+                    option_texts = [opt for opt in option_texts if not pd.isna(opt)]
                     correct_option_labels = [label.strip() for label in row['correct_option'].split(",")]
 
                     try:
@@ -104,6 +116,6 @@ class QuestionAdmin(admin.ModelAdmin):
 
     csv_upload_view.short_description = "Upload CSV data"
 
-admin.site.register(Category)
-admin.site.register(Quiz)
-admin.site.register(Question,QuestionAdmin)
+admin.site.register(Category, CategoryAdmin)
+admin.site.register(Quiz, QuizAdmin)
+admin.site.register(Question, QuestionAdmin)
