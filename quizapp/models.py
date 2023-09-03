@@ -25,7 +25,7 @@ class Category(models.Model):
 
 class Quiz(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
-    quiz_title = models.CharField(max_length=255)
+    quiz_title = models.CharField(max_length=500)
     quiz_description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -44,7 +44,7 @@ class Question(models.Model):
     
 class Option(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
-    option_text = models.CharField(max_length=100)
+    option_text = models.CharField(max_length=500)
     is_correct_option = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
