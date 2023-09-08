@@ -227,7 +227,7 @@ class SaveQuizResponse(views.APIView):
 
             response_data.append({
                 'message': 'Quiz response saved successfully!',
-                'score': total_score,
+                'score': round(((total_score/total_questions)*100),2),
                 'totalQuestions': total_questions,
                 'attemptedCorrect': total_attempted_correct,
                 'attemptedWrong': total_attempted_wrong,
