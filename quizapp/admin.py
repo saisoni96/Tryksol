@@ -33,23 +33,23 @@ class QuestionAdmin(admin.ModelAdmin):
     inlines = [OptionInline]
     search_fields = ['question_text']
     list_filter = ['quiz__category__category_name' , 'quiz__quiz_title']
-    change_list_template = 'admin/category/csv_upload_change_list.html'
+    change_list_template = 'admin/category/upload_change_list.html'
 
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path('upload-csv/', self.csv_upload_view, name='upload-csv'),
+            path('upload-file/', self.upload_file_view, name='upload-file'),
         ]
         return custom_urls + urls
 
-    def csv_upload_view(self, request):
+    def upload_file_view(self, request):
         if request.method == 'POST':
             form = UploadForm(request.POST, request.FILES)
             if form.is_valid():
                 uploaded_file = request.FILES['file']
                 file_extension = os.path.splitext(uploaded_file.name)[1].lower()
                 allowed_extensions = ['.csv', '.xls', '.xlsx']
-                
+
                 if file_extension not in allowed_extensions:
                     self.message_user(request, "Invalid file type. Please upload a valid CSV or Excel file.")
                     return redirect("..")
@@ -62,22 +62,23 @@ class QuestionAdmin(admin.ModelAdmin):
                 if df.empty:
                     self.message_user(request, "Error reading the file.")
                     return redirect("..")
-                
-                required_fields = ['category', 'quiz', 'question', 'option1', 'option2', 'option3', 'option4', 'correct_option']
 
+                required_fields = ['category', 'quiz', 'questions', 'option1', 'option2', 'option3', 'option4', 'correct_option']
+ 
                 missing_fields = [field for field in required_fields if field not in df.columns]
                 if missing_fields:
                     self.message_user(request, f"Missing fields: {', '.join(missing_fields)}")
                     return redirect("..")
-                
+
                 for index, row in df.iterrows():
                     category_name = row['category']
                     quiz_title = row['quiz']
-                    question_text = row['question']
+                    question_text = row['questions']
                     option_texts = [row['option1'], row['option2'], row['option3'], row['option4']]
                     if 'option5' in df.columns and row['option5']:
                         option_texts.append(row['option5'])
                     option_texts = [opt for opt in option_texts if not pd.isna(opt)]
+                    print(row['correct_option'])
                     correct_option_labels = [label.strip() for label in row['correct_option'].split(",")]
 
                     try:
@@ -112,9 +113,9 @@ class QuestionAdmin(admin.ModelAdmin):
                 return redirect("..")
         else:
             form = UploadForm()
-        return render(request, 'admin/category/csv_upload_form.html', {'form': form})
+        return render(request, 'admin/category/upload_form.html', {'form': form})
 
-    csv_upload_view.short_description = "Upload CSV data"
+    upload_file_view.short_description = "Upload or Excel data"
 
 admin.site.register(Category, CategoryAdmin)
 admin.site.register(Quiz, QuizAdmin)
