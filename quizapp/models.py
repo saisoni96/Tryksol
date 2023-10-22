@@ -26,7 +26,9 @@ class Category(models.Model):
 class Quiz(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
     quiz_title = models.CharField(max_length=500)
-    quiz_description = models.TextField(blank=True)
+    quiz_description = models.TextField()
+    timer = models.PositiveIntegerField(default=0)
+    num_questions = models.PositiveIntegerField(default=0) 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -36,7 +38,7 @@ class Quiz(models.Model):
 class Question(models.Model):
     quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE)
     question_text = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True) 
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
