@@ -9,6 +9,7 @@ from quizapp.serializers import UserRegisterSerializer
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ObjectDoesNotExist
+from rest_framework import serializers
 
 class SendOTPView(views.APIView):
     def post(self, request):
@@ -20,7 +21,7 @@ class SendOTPView(views.APIView):
             try:
                 user = User.objects.get(username=str(mobile_number))
             except:
-                user = User.objects.create(username=str(mobile_number), email=str(mobile_number)+'@gmail.com', mobile_number=mobile_number)
+                user = User.objects.create(username=str(mobile_number), mobile_number=mobile_number)
             otp = generate_otp()
             user.otp = otp
             user.save()
@@ -56,6 +57,10 @@ class UserRegisterView(views.APIView):
             serializer.is_valid(raise_exception=True)
             serializer.save()
             return Response({'message': 'Registration successful.', 'status': 'Success', 'statusCode': status.HTTP_200_OK})
+        except serializers.ValidationError as e:
+            # If a ValidationError occurs, extract the error messages from the serializer
+            error_messages = serializer.errors
+            return Response({'message': error_messages, 'status': 'Failed', 'statusCode': status.HTTP_400_BAD_REQUEST})
         except Exception as e:
             return Response({'message': "An unexpected server error occurred. Please try again later.", 
                             'status': 'Failed', 'statusCode': status.HTTP_500_INTERNAL_SERVER_ERROR})
@@ -152,6 +157,7 @@ class quizListView(views.APIView):
 class FetchNewQuiz(views.APIView):
     def get(self, request, quiz_id):
         try:
+            user = request.user
             quiz=Quiz.objects.get(id=quiz_id)
             all_questions = Question.objects.filter(quiz=quiz)
             selected_questions = all_questions.order_by('?')[:quiz.num_questions]
