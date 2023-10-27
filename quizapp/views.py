@@ -10,6 +10,7 @@ from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
+from rest_framework.permissions import IsAuthenticated
 
 class SendOTPView(views.APIView):
     def post(self, request):
@@ -64,6 +65,58 @@ class UserRegisterView(views.APIView):
         except Exception as e:
             return Response({'message': "An unexpected server error occurred. Please try again later.", 
                             'status': 'Failed', 'statusCode': status.HTTP_500_INTERNAL_SERVER_ERROR})
+
+class UserProfileView(views.APIView):
+    def get(self, request):
+        try:
+            user=request.user
+            return Response( {"first_name": user.first_name, "last_name": user.last_name, "email": user.email, "mobile_number":user.mobile_number,"dob":user.dob,"status":status.HTTP_200_OK})
+        except Exception as e:
+            return Response({'message': "An unexpected server error occurred. Please try again later.", 
+                            'status': 'Failed', 'statusCode': status.HTTP_500_INTERNAL_SERVER_ERROR})
+
+
+class UserProfileUpdateView(views.APIView):
+    def patch(self, request):
+        try:
+            user = request.user
+            if 'dob' in request.data:
+                user.dob = request.data['dob']
+            if 'first_name' in request.data:
+                user.first_name = request.data['first_name']
+            if 'last_name' in request.data:
+                user.last_name = request.data['last_name']
+            if 'email' in request.data:
+                user.email = request.data['email']
+            user.save()
+            return Response({
+                'message': 'Profile updated successfully.',
+                'status': 'Success',
+                'statusCode': status.HTTP_200_OK
+            })
+        except Exception as e:
+            return Response({
+                'message': "An unexpected server error occurred. Please try again later.",
+                'status': 'Failed',
+                'statusCode': status.HTTP_500_INTERNAL_SERVER_ERROR
+            })
+
+class CheckUserView(views.APIView):
+    def get(self, request):
+        if request.user.is_authenticated:
+            return Response({
+                'message': 'User is authenticated',
+                'status': 'Success',
+                'statusCode': status.HTTP_200_OK,
+                "user_code":1
+            })
+        else:
+            return Response({
+                'message': 'User is not authenticated',
+                'status': 'Success',
+                'statusCode': status.HTTP_200_OK,
+                "user_code":0
+            })
 
 class UserLoginView(views.APIView):
     def post(self, request):
