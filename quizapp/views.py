@@ -2,7 +2,7 @@ import ast
 from rest_framework import views, status
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
-from .utils import generate_otp
+from .utils import generate_otp, send_otp_via_sms
 from .models import User, Category, Quiz, Question, Option, Result
 from django.contrib.auth import authenticate, logout
 from quizapp.serializers import UserRegisterSerializer
@@ -26,6 +26,8 @@ class SendOTPView(views.APIView):
             otp = generate_otp()
             user.otp = otp
             user.save()
+            # result, message = send_otp_via_sms()
+            # print(result, message)
             return Response({'message': 'OTP sent successfully.', 'otp': otp, 'status': 'Success', 'statusCode': status.HTTP_200_OK})
         except Exception as e:
             return Response({'message': "An unexpected server error occurred. Please try again later.", 
@@ -36,8 +38,9 @@ class VerifyOTPView(views.APIView):
         try:
             mobile_number = request.data.get('mobile_number')
             otp = request.data.get('otp')
+            print("otppppp")
             user = User.objects.get(mobile_number=mobile_number)
-
+            print(user)
             if not (mobile_number and otp):
                 return Response({'message': 'Mobile number is required.', 'status': 'Failed', 'statusCode': status.HTTP_400_BAD_REQUEST})
 
@@ -190,7 +193,11 @@ class LogoutView(views.APIView):
 class CategoryListView(views.APIView):
     def get(self, request):
         try:
-            categories = Category.objects.all()
+            name= request.GET.get('search', None)
+            if name :
+                categories = Category.objects.filter(category_name__icontains=name)
+            else:
+                categories = Category.objects.all()
             items = [{"categoryId": category.id, "categoryName": category.category_name, "categoryDescription": category.description} for category in categories]
             return Response(items, status=status.HTTP_200_OK)
         except Exception as e:
@@ -200,7 +207,11 @@ class CategoryListView(views.APIView):
 class quizListView(views.APIView):
     def get(self, request, category_id):
         try:
-            quiz = Quiz.objects.filter(category_id=category_id)
+            name= request.GET.get('search', None)
+            if name :
+                quiz = Quiz.objects.filter(category_id=category_id,quiz_title__icontains=name) 
+            else:
+                quiz = Quiz.objects.filter(category_id=category_id)     
             items = [{"quizId": item.id, "quizName": item.quiz_title, "quizDescription": item.quiz_description, "quizNumOfQuestions": item.num_questions, "quizTimer": item.timer} for item in quiz]
             return Response({'items':items,'status': 'Success', 'statusCode':status.HTTP_200_OK})
         except Exception as e:
@@ -257,9 +268,9 @@ class SaveQuizResponse(views.APIView):
             except Quiz.DoesNotExist:
                 return Response({'message': 'Invalid quizId', 'status': 'Failed', 'statusCode': status.HTTP_400_BAD_REQUEST})
 
-            consolidated_responses = []
             total_score = 0
             total_questions = 0
+
             total_attempted_correct = 0
             total_attempted_wrong = 0
 
@@ -274,23 +285,16 @@ class SaveQuizResponse(views.APIView):
 
                 for response in quiz_responses_data:
                     question_id = response['questionId']
-                    selected_option_ids = selected_options
-
-                    try:
-                        question = Question.objects.get(id=question_id)
-                    except Question.DoesNotExist:
-                        response_data.append({'message': 'Invalid question ID', 'status': status.HTTP_400_BAD_REQUEST})
-                        continue
-
-                    correct_option_ids = Option.objects.filter(question_id=question_id, is_correct_option=True).values_list('id', flat=True)
-                    if set(selected_option_ids) == set(correct_option_ids):
+                    selected_option_ids = {option['optionId'] for option in selected_options}  # Use set for faster membership testing
+                    correct_option_ids = set(Option.objects.filter(question_id=question_id, is_correct_option=True).values_list('id', flat=True))
+                    if selected_option_ids == correct_option_ids:
                         score += 1
                         attempted_correct += 1
                     else:
                         attempted_wrong += 1
 
                 total_score += score
-                total_questions += len(quiz_responses_data)
+                total_questions += len(quiz_responses_data)  
                 total_attempted_correct += attempted_correct
                 total_attempted_wrong += attempted_wrong
 
@@ -301,20 +305,22 @@ class SaveQuizResponse(views.APIView):
                 score=total_score
             )
 
-            response_data.append({
-                'message': 'Quiz response saved successfully!',
-                'score': round(((total_score / total_questions) * 100), 2),
-                'totalQuestions': total_questions,
-                'attemptedCorrect': total_attempted_correct,
-                'attemptedWrong': total_attempted_wrong,
-                'status': 'Success',
-                'statusCode': status.HTTP_200_OK
-            })
-
+            response_data = {
+                "message": "Quiz response saved successfully!",
+                "score": round(total_score / total_questions * 100,2),
+                "totalQuestions": quiz.num_questions,
+                "totalAttempted": total_attempted_correct + total_attempted_wrong,
+                "attemptedCorrect": total_attempted_correct,
+                "attemptedWrong": total_attempted_wrong,
+                "status": "Success",
+                "statusCode": 200
+            }
+                
             return Response(response_data)
         except Exception as e:
-            return Response({'message': "An unexpected server error occurred. Please try again later.", 
-                            'status': 'Failed', 'statusCode': status.HTTP_500_INTERNAL_SERVER_ERROR})
+            return Response({'message': "An unexpected server error occurred. Please try again later.",
+                             'status': 'Failed', 'statusCode': status.HTTP_500_INTERNAL_SERVER_ERROR})
+
 
 class Results(views.APIView):
     def get(self, request):
