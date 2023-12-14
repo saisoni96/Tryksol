@@ -96,10 +96,10 @@ WSGI_APPLICATION = 'tryksol.wsgi.application'
 DATABASES = {
    'default': {
        'ENGINE': 'django.db.backends.postgresql',
-       'NAME': 'tryksol_db',
-       'USER': 'admin',
-       'PASSWORD': 'root',
-       'HOST': 'localhost',
+       'NAME': 'tryksol_new',
+       'USER': 'postgres',
+       'PASSWORD': 'tryksha123',
+       'HOST': 'tryksol.cdgxlfao3swl.ap-south-1.rds.amazonaws.com',
        'PORT': '5432',
    }
 }
