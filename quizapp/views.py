@@ -1,4 +1,3 @@
-import ast
 from rest_framework import views, status
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
@@ -10,7 +9,6 @@ from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
-from rest_framework.permissions import IsAuthenticated
 
 class SendOTPView(views.APIView):
     def post(self, request):
@@ -291,17 +289,17 @@ class SaveQuizResponse(views.APIView):
                         score += 1
                         attempted_correct += 1
                     else:
-                        attempted_wrong += 1
+                        attempted_wrong += 1    
 
                 total_score += score
                 total_questions += len(quiz_responses_data)  
                 total_attempted_correct += attempted_correct
                 total_attempted_wrong += attempted_wrong
-
+            modified_result = modify_json(request.data)
             result = Result.objects.create(
                 user=user,
                 quiz=quiz,
-                quiz_data=str(request.data),
+                quiz_data=modified_result,
                 score=total_score
             )
 
@@ -321,12 +319,28 @@ class SaveQuizResponse(views.APIView):
             return Response({'message': "An unexpected server error occurred. Please try again later.",
                              'status': 'Failed', 'statusCode': status.HTTP_500_INTERNAL_SERVER_ERROR})
 
+def modify_json(input_json):
+    modified_list = []
+
+    for response in input_json["responses"]:
+        for quiz_response in response["quizResponses"]:
+            modified_entry = {
+                "question": quiz_response["questionText"],
+                "options": []
+            }
+            for option in quiz_response["options"]:
+                is_selected = option in response["selectedOptions"]
+                modified_entry["options"].append({**option, "selected": is_selected})
+
+            modified_list.append(modified_entry)
+    return modified_list
 
 class Results(views.APIView):
     def get(self, request):
         try:
             queryset = Result.objects.filter(user=request.user)
             items = [{"resultId": item.id, "quizId": item.quiz_id, "category": item.quiz.category.category_name, "quizTitle": item.quiz.quiz_title} for item in queryset]
+            modified_result = modify_json(items)
             response_data = {
                 'results': items,
                 'status': 'Success',
@@ -347,7 +361,7 @@ class ResultDetails(views.APIView):
                 'user': result.user.first_name,
                 'Category': result.quiz.category.category_name,
                 'quizTitle': result.quiz.quiz_title,
-                'quiz_data': ast.literal_eval(result.quiz_data),
+                'quiz_data': result.quiz_data,
                 'score': result.score,
                 'dateCompleted': result.date_completed,
                 'createdAt': result.created_at,
