@@ -24,8 +24,7 @@ class SendOTPView(views.APIView):
             otp = generate_otp()
             user.otp = otp
             user.save()
-            # result, message = send_otp_via_sms()
-            # print(result, message)
+            result= send_otp_via_sms(mobile_number,otp)
             return Response({'message': 'OTP sent successfully.', 'otp': otp, 'status': 'Success', 'statusCode': status.HTTP_200_OK})
         except Exception as e:
             return Response({'message': "An unexpected server error occurred. Please try again later.", 
@@ -339,8 +338,17 @@ class Results(views.APIView):
     def get(self, request):
         try:
             queryset = Result.objects.filter(user=request.user)
-            items = [{"resultId": item.id, "quizId": item.quiz_id, "category": item.quiz.category.category_name, "quizTitle": item.quiz.quiz_title} for item in queryset]
-            modified_result = modify_json(items)
+            items = [{"resultId": item.id, 
+                      "quizId": item.quiz_id, 
+                    "user": item.user.first_name,
+                    "Category": item.quiz.category.category_name,
+                    "quizTitle": item.quiz.quiz_title,
+                    "score": item.score,
+                    "dateCompleted": item.date_completed,
+                    "category": item.quiz.category.category_name, 
+                    "quizTitle": item.quiz.quiz_title
+                    } 
+                    for item in queryset]
             response_data = {
                 'results': items,
                 'status': 'Success',
@@ -359,13 +367,7 @@ class ResultDetails(views.APIView):
             data = {
                 'result_id': result_id,
                 'user': result.user.first_name,
-                'Category': result.quiz.category.category_name,
-                'quizTitle': result.quiz.quiz_title,
                 'quiz_data': result.quiz_data,
-                'score': result.score,
-                'dateCompleted': result.date_completed,
-                'createdAt': result.created_at,
-                'updatedAt': result.updated_at,
                 'status': 'Success',
                 'statusCode': status.HTTP_200_OK
             }
